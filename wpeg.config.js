@@ -26,6 +26,7 @@ cfg.template_files_variables = {
 
 // Copy files.
 cfg.copy_files_src = [
+    './composer*',
     '{src}/**/*',
     '!{src}/**/*.{js,scss}',
     '{src}/**/vendor/**/*.{js,scss}',

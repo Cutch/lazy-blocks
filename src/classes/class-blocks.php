@@ -1,4 +1,5 @@
 <?php
+
 /**
  * LazyBlocks blocks.
  *
@@ -9,6 +10,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once lazyblocks()->plugin_path() .'vendor/autoload.php';
+use LightnCandy\LightnCandy;
 
 /**
  * LazyBlocks_Blocks class. Class to work with LazyBlocks CPT.
@@ -19,7 +22,7 @@ class LazyBlocks_Blocks {
      *
      * @var null|object
      */
-    private $handlebars = null;
+    private $handlebarHelpers = array();
 
     /**
      * Rules to sanitize SVG
@@ -90,18 +93,11 @@ class LazyBlocks_Blocks {
      * Handlebars php.
      */
     public function prepare_handlebars() {
-        require_once lazyblocks()->plugin_path() . 'vendor/Handlebars/Autoloader.php';
-
-        Handlebars\Autoloader::register();
-
-        $this->handlebars = new Handlebars\Handlebars();
-
         // phpcs:ignore
-        // truncate
-        // {{truncate 'string' 2 'true'}}.
-        $this->handlebars->registerHelper(
-            'truncate',
-            function( $str, $len, $ellipsis = 'true' ) {
+        $this->handlebarHelpers = array(
+            // truncate
+            // {{truncate 'string' 2 'true'}}.
+            'truncate' => function( $str, $len, $ellipsis = 'true' ) {
                 if ( $str && $len && mb_strlen( $str, 'UTF-8' ) > $len ) {
                     $new_str = mb_substr( $str, 0, $len + 1, 'UTF-8' );
                     $count   = mb_strlen( $new_str, 'UTF-8' );
@@ -121,18 +117,14 @@ class LazyBlocks_Blocks {
                         $new_str = mb_substr( $str, 0, $len, 'UTF-8' );
                     }
 
-                    return new \Handlebars\SafeString( $new_str . ( 'true' === $ellipsis ? '...' : '' ) );
+                    return new \LightnCandy\SafeString( $new_str . ( 'true' === $ellipsis ? '...' : '' ) );
                 }
                 return $str;
-            }
-        );
-
-        // compare.
-        // {{#compare 1 '===' 2}} Show if true {{/compare}}
-        // slightly changed https://gist.github.com/doginthehat/1890659.
-        $this->handlebars->registerHelper(
-            'compare',
-            function( $lvalue, $operator, $rvalue = null, $options = null ) {
+            },
+            // compare.
+            // {{#compare 1 '===' 2}} Show if true {{/compare}}
+            // slightly changed https://gist.github.com/doginthehat/1890659.
+            'compare' => function( $lvalue, $operator, $rvalue = null, $options = null ) {
                 if ( null === $rvalue ) {
                     return $options['inverse']();
                 }
@@ -188,15 +180,11 @@ class LazyBlocks_Blocks {
                 }
 
                 return $options['inverse']();
-            }
-        );
-
-        // math.
-        // {{math 1 '+' 2}}
-        // https://stackoverflow.com/questions/33059203/error-missing-helper-in-handlebars-js/46317662#46317662.
-        $this->handlebars->registerHelper(
-            'math',
-            function( $lvalue, $operator, $rvalue ) {
+            },
+            // math.
+            // {{math 1 '+' 2}}
+            // https://stackoverflow.com/questions/33059203/error-missing-helper-in-handlebars-js/46317662#46317662.
+            'math' => function( $lvalue, $operator, $rvalue ) {
                 $result = '';
 
                 switch ( $operator ) {
@@ -218,15 +206,10 @@ class LazyBlocks_Blocks {
                 }
 
                 return $result;
-            }
-        );
-
-        // phpcs:ignore
-        // do_shortcode.
-        // {{{do_shortcode 'my_shortcode' this}}}.
-        $this->handlebars->registerHelper(
-            'do_shortcode',
-            function( $shortcode_name, $attributes ) {
+            },
+            // do_shortcode.
+            // {{{do_shortcode 'my_shortcode' this}}}.
+            'do_shortcode' => function( $shortcode_name, $attributes ) {
                 $result = '[' . $shortcode_name;
 
                 // prepare attributes.
@@ -270,25 +253,15 @@ class LazyBlocks_Blocks {
                 $result .= ']';
 
                 return do_shortcode( $result );
-            }
-        );
-
-        // phpcs:ignore
-        // date_i18n.
-        // {{date_i18n 'F j, Y H:i' '2018-09-16 15:35'}}.
-        $this->handlebars->registerHelper(
-            'date_i18n',
-            function( $format, $time ) {
+            },
+            // date_i18n.
+            // {{date_i18n 'F j, Y H:i' '2018-09-16 15:35'}}.
+            'date_i18n' => function( $format, $time ) {
                 return date_i18n( $format, strtotime( $time ) );
-            }
-        );
-
-        // phpcs:ignore
-        // var_dump.
-        // {{var_dump 'test'}}.
-        $this->handlebars->registerHelper(
-            'var_dump',
-            function( $val ) {
+            },
+            // var_dump.
+            // {{var_dump 'test'}}.
+            'var_dump' => function( $val ) {
                 ob_start();
                 // phpcs:ignore
                 var_dump( $val );
@@ -297,8 +270,8 @@ class LazyBlocks_Blocks {
         );
 
         // custom action for extending default helpers by 3rd-party.
-        do_action( 'lzb/handlebars/object', $this->handlebars );
-        do_action( 'lzb_handlebars_object', $this->handlebars );
+        // do_action( 'lzb/handlebars/object', $this->handlebars );
+        // do_action( 'lzb_handlebars_object', $this->handlebars );
     }
 
     /**
@@ -1309,7 +1282,28 @@ class LazyBlocks_Blocks {
 
                     // Handlebars.
                 } else {
-                    $result = $this->handlebars->render( $block['code'][ $custom_render_name ], $attributes );
+
+                    try {
+                        $phpStr = LightnCandy::compile( $block['code'][ $custom_render_name ], array(
+                            'flags' => LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_MUSTACHE  | LightnCandy::FLAG_HANDLEBARSJS_FULL | LightnCandy::FLAG_STANDALONEPHP ) );
+                        if( $phpStr ) {
+                            $renderer = eval( $phpStr );
+                            $result = $renderer( $attributes, array(
+                                "debug" => \LightnCandy\Runtime::DEBUG_ERROR_LOG
+                            ) );
+                        }else{
+                            $result = "Unknown error";
+                        }
+                    } catch (Exception $e) {
+                        $result = $e->getMessage();
+                        // echo 'Caught exception: ',  $e->getMessage(), "\n";
+                    }
+
+                    // echo '<pre>'.print_r(  $block['code'][ $custom_render_name ], true ).'</pre>\r\n';
+                    // echo '<pre><code>'.print_r( $phpStr, true ).'</code></pre>';
+                    // if( $phpStr ) {
+                    // }else{
+                    // }
                 }
             }
         }
